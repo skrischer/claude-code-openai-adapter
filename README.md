@@ -1,6 +1,6 @@
-# Claude Max API Proxy
+# Claude Code OpenAI Adapter
 
-An OpenAI-compatible API server that wraps the [Claude Code CLI](https://github.com/anthropics/claude-code) as a subprocess. Any tool that speaks the OpenAI chat completions API can talk to Claude through this proxy.
+A lightweight adapter that exposes the [Claude Code CLI](https://github.com/anthropics/claude-code) through an OpenAI-compatible API interface. Any tool or framework that speaks the OpenAI chat completions format can seamlessly integrate with Claude Code.
 
 ## How It Works
 
@@ -9,16 +9,14 @@ Your App (OpenAI-compatible client)
          |
     POST /v1/chat/completions
          |
-   Claude Max API Proxy (Express)
+   Claude Code OpenAI Adapter (Express)
          |
    Claude Code CLI (spawned subprocess)
-         |
-   Anthropic API (via CLI's OAuth token)
          |
    Response -> OpenAI format -> Your App
 ```
 
-The Claude Code CLI authenticates via OAuth using your Claude Pro/Max subscription. This proxy spawns it as a subprocess, feeds prompts via stdin, parses its JSON streaming output, and translates everything into OpenAI-compatible SSE chunks.
+The adapter spawns the Claude Code CLI as a subprocess, feeds prompts via stdin, parses its JSON streaming output, and translates everything into OpenAI-compatible SSE chunks. Authentication is handled entirely by the CLI itself.
 
 ## Features
 
@@ -29,6 +27,7 @@ The Claude Code CLI authenticates via OAuth using your Claude Pro/Max subscripti
 - **Session management** — conversation IDs are mapped to CLI session IDs with 24h TTL
 - **Stdin-based prompt delivery** — avoids OS argument size limits (`E2BIG`)
 - **Subprocess isolation** — `spawn()` with no shell, no injection surface
+- **Standard format normalization** — translates Claude Code's native output into the widely adopted OpenAI completions format
 
 ## Requirements
 
@@ -38,13 +37,12 @@ The Claude Code CLI authenticates via OAuth using your Claude Pro/Max subscripti
   npm install -g @anthropic-ai/claude-code
   claude auth login
   ```
-- An active Claude Pro or Max subscription
 
 ## Installation
 
 ```bash
-git clone https://github.com/skrischer/claude-max-api-proxy.git
-cd claude-max-api-proxy
+git clone https://github.com/skrischer/claude-code-openai-adapter.git
+cd claude-code-openai-adapter
 npm install
 npm run build
 ```
@@ -86,7 +84,7 @@ curl -N -X POST http://localhost:3456/v1/chat/completions \
 
 ## Models
 
-The proxy maps model IDs to Claude Code CLI aliases:
+The adapter maps model IDs to Claude Code CLI aliases:
 
 | Model ID | CLI alias | Notes |
 |----------|-----------|-------|
@@ -96,7 +94,7 @@ The proxy maps model IDs to Claude Code CLI aliases:
 | `claude-sonnet-4` | `sonnet` | |
 | `claude-haiku-4` | `haiku` | |
 
-Additional accepted formats: `opus-max`, `sonnet-max`, `claude-max/<model>`, `claude-code-cli/<model>` prefixes. Unknown models default to `opus`.
+Additional accepted formats: `claude-code/<model>` prefixes. Unknown models default to `opus`.
 
 ## Client Configuration
 
@@ -105,7 +103,7 @@ Additional accepted formats: `opus-max`, `sonnet-max`, `claude-max/<model>`, `cl
 ```json
 {
   "providers": {
-    "claude-max": {
+    "claude-code": {
       "baseUrl": "http://127.0.0.1:3456/v1",
       "apiKey": "not-needed",
       "api": "openai-completions",
@@ -131,17 +129,17 @@ response = client.chat.completions.create(
 
 ### Any OpenAI-compatible client
 
-Point `base_url` to `http://localhost:3456/v1` and set `api_key` to any non-empty string. The proxy ignores the API key — authentication is handled by the Claude CLI.
+Point `base_url` to `http://localhost:3456/v1` and set `api_key` to any non-empty string. The adapter does not handle authentication — that is managed by the Claude Code CLI.
 
 ## Running as a systemd Service
 
 ```ini
 [Unit]
-Description=Claude Max API Proxy
+Description=Claude Code OpenAI Adapter
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/node /path/to/claude-max-api-proxy/dist/server/standalone.js
+ExecStart=/usr/bin/node /path/to/claude-code-openai-adapter/dist/server/standalone.js
 Restart=always
 Environment=PATH=/usr/local/bin:/usr/bin
 WorkingDirectory=/home/user
@@ -189,11 +187,6 @@ src/
 **Empty streaming response** — Use `curl -N` to disable output buffering.
 
 **Debug mode** — `DEBUG_SUBPROCESS=true node dist/server/standalone.js`
-
-## Acknowledgments
-
-Originally inspired by [atalovesyou/claude-max-api-proxy](https://github.com/atalovesyou/claude-max-api-proxy). This project has since been substantially rewritten.
-
 ## License
 
 MIT

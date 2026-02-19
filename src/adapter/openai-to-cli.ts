@@ -7,7 +7,13 @@ import type {
   OpenAIContentPart,
 } from "../types/openai.js";
 
-export type ClaudeModel = "opus" | "sonnet" | "haiku";
+/**
+ * Model string passed to `claude --model`.
+ * Can be a short alias ("opus", "sonnet", "haiku") or a full model ID
+ * ("claude-opus-4-6", "claude-sonnet-4-5-20250929", etc.).
+ * The CLI resolves the concrete model internally.
+ */
+export type ClaudeModel = string;
 
 export interface CliInput {
   prompt: string;
@@ -17,49 +23,52 @@ export interface CliInput {
   tools?: string[];
 }
 
-const MODEL_MAP: Record<string, ClaudeModel> = {
-  // Direct model names
-  "claude-opus-4": "opus",
-  "claude-opus-4-6": "opus",
-  "claude-sonnet-4": "sonnet",
-  "claude-sonnet-4-5": "sonnet",
-  "claude-haiku-4": "haiku",
-  // With provider prefix
-  "claude-code-cli/claude-opus-4": "opus",
-  "claude-code-cli/claude-opus-4-6": "opus",
-  "claude-code-cli/claude-sonnet-4": "sonnet",
-  "claude-code-cli/claude-sonnet-4-5": "sonnet",
-  "claude-code-cli/claude-haiku-4": "haiku",
-  // Claude-max prefix (from OpenClaw config)
-  "claude-max/claude-opus-4": "opus",
-  "claude-max/claude-opus-4-6": "opus",
-  "claude-max/claude-sonnet-4": "sonnet",
-  "claude-max/claude-sonnet-4-5": "sonnet",
-  "claude-max/claude-haiku-4": "haiku",
-  // Aliases
-  "opus": "opus",
-  "opus-max": "opus",
-  "sonnet": "sonnet",
-  "sonnet-max": "sonnet",
-  "haiku": "haiku",
-};
+/** Short aliases the CLI accepts directly */
+const KNOWN_ALIASES = new Set(["opus", "sonnet", "haiku"]);
 
 /**
- * Extract Claude model alias from request model string
+ * Extract the model identifier to pass to `claude --model`.
+ *
+ * The CLI only accepts two forms:
+ *   - Short aliases: "opus", "sonnet", "haiku"
+ *   - Full dated IDs: "claude-sonnet-4-5-20250929"
+ *
+ * Undated names like "claude-opus-4" or "claude-sonnet-4-5" are NOT valid
+ * CLI arguments and must be mapped to the corresponding alias.
+ *
+ * Strategy:
+ *  1. Strip any provider prefix (e.g. "claude-code/", "openai/")
+ *  2. Strip any "-max" suffix aliases (e.g. "opus-max" → "opus")
+ *  3. If it's a known short alias → use as-is
+ *  4. If it's a full dated model ID (ends in -YYYYMMDD) → pass through
+ *  5. If it starts with "claude-{family}" → extract the family alias
+ *  6. Otherwise → default to "opus"
  */
 export function extractModel(model: string): ClaudeModel {
-  // Try direct lookup
-  if (MODEL_MAP[model]) {
-    return MODEL_MAP[model];
+  // Strip provider prefixes (e.g. "openai/", "claude-code/", "claude-code-cli/")
+  let cleaned = model.replace(/^[a-z0-9_-]+\//, "");
+
+  // Strip "-max" suffix (e.g. "opus-max" → "opus")
+  cleaned = cleaned.replace(/-max$/, "");
+
+  // Known short alias
+  if (KNOWN_ALIASES.has(cleaned)) {
+    return cleaned;
   }
 
-  // Try stripping provider prefix
-  const stripped = model.replace(/^claude-code-cli\//, "");
-  if (MODEL_MAP[stripped]) {
-    return MODEL_MAP[stripped];
+  // Full dated model ID (e.g. "claude-opus-4-5-20251101") → pass through
+  if (/^claude-(?:opus|sonnet|haiku)-.+-\d{8}$/.test(cleaned)) {
+    return cleaned;
   }
 
-  // Default to opus (Claude Max subscription)
+  // Undated claude model name → extract family alias
+  // e.g. "claude-opus-4" → "opus", "claude-sonnet-4-5" → "sonnet"
+  const familyMatch = cleaned.match(/^claude-(opus|sonnet|haiku)(?:-|$)/);
+  if (familyMatch) {
+    return familyMatch[1];
+  }
+
+  // Fallback
   return "opus";
 }
 

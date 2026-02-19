@@ -301,46 +301,34 @@ async function handleNonStreamingResponse(
   });
 }
 
+/** Cached model list, populated at startup via refreshModels() */
+let cachedModels: string[] = [];
+
+/**
+ * Refresh the cached model list by scanning the CLI binary.
+ * Call once at server startup.
+ */
+export async function refreshModels(): Promise<void> {
+  const { discoverModels } = await import("../subprocess/manager.js");
+  cachedModels = await discoverModels();
+  console.log(`[Models] Discovered ${cachedModels.length} models: ${cachedModels.join(", ")}`);
+}
+
 /**
  * Handle GET /v1/models
  *
- * Returns available models
+ * Returns available models discovered from the CLI binary
  */
 export function handleModels(_req: Request, res: Response): void {
+  const now = Math.floor(Date.now() / 1000);
   res.json({
     object: "list",
-    data: [
-      {
-        id: "claude-opus-4-6",
-        object: "model",
-        owned_by: "anthropic",
-        created: Math.floor(Date.now() / 1000),
-      },
-      {
-        id: "claude-opus-4",
-        object: "model",
-        owned_by: "anthropic",
-        created: Math.floor(Date.now() / 1000),
-      },
-      {
-        id: "claude-sonnet-4-5",
-        object: "model",
-        owned_by: "anthropic",
-        created: Math.floor(Date.now() / 1000),
-      },
-      {
-        id: "claude-sonnet-4",
-        object: "model",
-        owned_by: "anthropic",
-        created: Math.floor(Date.now() / 1000),
-      },
-      {
-        id: "claude-haiku-4",
-        object: "model",
-        owned_by: "anthropic",
-        created: Math.floor(Date.now() / 1000),
-      },
-    ],
+    data: cachedModels.map((id) => ({
+      id,
+      object: "model",
+      owned_by: "anthropic",
+      created: now,
+    })),
   });
 }
 

@@ -97,7 +97,7 @@ export function formatToolAnnotation(toolUse: ClaudeCliAssistantToolUseContent):
 
 /**
  * Shorten a file path to just the last 2-3 components for readability.
- * "/root/.openclaw/projects/claude-max-api-proxy/src/server/routes.ts"
+ * "/root/.openclaw/projects/claude-code-openai-adapter/src/server/routes.ts"
  * → "src/server/routes.ts"
  */
 function shortenPath(filePath: string): string {

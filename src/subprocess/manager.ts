@@ -301,3 +301,93 @@ export async function verifyAuth(): Promise<{ ok: boolean; error?: string }> {
   // Authentication errors will surface when making actual API calls.
   return { ok: true };
 }
+
+/**
+ * Validate that a string matches the real Anthropic model naming scheme.
+ *
+ * Accepted patterns:
+ *   claude-{family}-{major}                   e.g. claude-opus-4
+ *   claude-{family}-{major}-{minor}           e.g. claude-opus-4-6   (minor >= 1)
+ *   claude-{family}-{major}-{date}            e.g. claude-opus-4-20250514
+ *   claude-{family}-{major}-{minor}-{date}    e.g. claude-sonnet-4-5-20250929
+ */
+function isValidModelId(id: string): boolean {
+  return /^claude-(?:opus|sonnet|haiku)-\d+(?:-[1-9]\d?(?:-\d{8})?|-\d{8})?$/.test(id);
+}
+
+/**
+ * Discover available models by scanning the Claude CLI binary for model ID strings.
+ *
+ * The CLI binary contains all known model identifiers (e.g. "claude-opus-4-6",
+ * "claude-sonnet-4-5-20250929"). We extract these with a regex and return
+ * deduplicated, sorted results. This way we never need to hardcode model lists.
+ */
+export async function discoverModels(): Promise<string[]> {
+  return new Promise((resolve) => {
+    // Find the CLI binary path
+    const which = spawn("which", ["claude"], { stdio: "pipe" });
+    let binPath = "";
+
+    which.stdout?.on("data", (chunk: Buffer) => {
+      binPath += chunk.toString();
+    });
+
+    which.on("close", async (code) => {
+      if (code !== 0 || !binPath.trim()) {
+        resolve(FALLBACK_MODELS);
+        return;
+      }
+
+      try {
+        // Resolve symlinks to get the actual binary
+        const resolved = await fs.realpath(binPath.trim());
+
+        // Read the binary and extract model IDs
+        const binary = await fs.readFile(resolved);
+        const text = binary.toString("utf8");
+
+        // Greedy scan: grab anything that looks like a model string
+        const pattern = /claude-(?:opus|sonnet|haiku)-\d[\w.-]*/g;
+        const matches = new Set<string>();
+
+        for (const match of text.matchAll(pattern)) {
+          const id = match[0];
+          // Validate against the known Anthropic naming scheme:
+          //   claude-{family}-{major}              e.g. claude-opus-4
+          //   claude-{family}-{major}-{minor}      e.g. claude-opus-4-6   (minor >= 1)
+          //   claude-{family}-{major}-{date}       e.g. claude-opus-4-20250514
+          //   claude-{family}-{major}-{minor}-{date}  e.g. claude-sonnet-4-5-20250929
+          // Minor version must be >= 1 (no ".0" releases; base version is just {major}).
+          if (!isValidModelId(id)) continue;
+          matches.add(id);
+        }
+
+        if (matches.size === 0) {
+          resolve(FALLBACK_MODELS);
+          return;
+        }
+
+        // Sort: newest/highest version first
+        const sorted = [...matches].sort((a, b) => b.localeCompare(a));
+        resolve(sorted);
+      } catch {
+        resolve(FALLBACK_MODELS);
+      }
+    });
+
+    which.on("error", () => {
+      resolve(FALLBACK_MODELS);
+    });
+  });
+}
+
+const FALLBACK_MODELS = [
+  "claude-opus-4-6",
+  "claude-opus-4-5",
+  "claude-opus-4-1",
+  "claude-opus-4",
+  "claude-sonnet-4-5",
+  "claude-sonnet-4",
+  "claude-haiku-4-5",
+  "claude-haiku-4",
+];

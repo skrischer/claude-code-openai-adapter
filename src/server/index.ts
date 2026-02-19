@@ -6,7 +6,7 @@
 
 import express, { Express, Request, Response, NextFunction } from "express";
 import { createServer, Server } from "http";
-import { handleChatCompletions, handleModels, handleHealth } from "./routes.js";
+import { handleChatCompletions, handleModels, handleHealth, refreshModels } from "./routes.js";
 
 export interface ServerConfig {
   port: number;
@@ -91,6 +91,9 @@ export async function startServer(config: ServerConfig): Promise<Server> {
     console.log("[Server] Already running, returning existing instance");
     return serverInstance;
   }
+
+  // Discover available models before serving requests
+  await refreshModels();
 
   const app = createApp(config.cwd);
 

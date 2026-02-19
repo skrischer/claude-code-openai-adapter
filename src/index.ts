@@ -1,8 +1,7 @@
 /**
- * Claude Code CLI Provider — OpenAI-compatible API proxy
+ * Claude Code CLI Provider — OpenAI-compatible API adapter
  *
- * Enables using Claude Max subscription through Claude Code CLI,
- * bypassing OAuth token scope restrictions.
+ * Normalizes Claude Code CLI output into the OpenAI chat completions format.
  */
 
 import { startServer, stopServer, getServer } from "./server/index.js";
@@ -70,7 +69,7 @@ const claudeCodeCliPlugin = {
   id: "claude-code-cli-provider",
   name: "Claude Code CLI Provider",
   description:
-    "Use Claude Max subscription via Claude Code CLI (bypasses OAuth restrictions)",
+    "OpenAI-compatible adapter for Claude Code CLI",
   configSchema: emptyPluginConfigSchema(),
 
   register(api: any) {
@@ -81,14 +80,14 @@ const claudeCodeCliPlugin = {
       id: PROVIDER_ID,
       label: PROVIDER_LABEL,
       docsPath: "/providers/claude-code-cli",
-      aliases: ["claude-cli", "claude-max"],
+      aliases: ["claude-cli", "claude-code"],
       envVars: [], // No env vars needed - uses Claude CLI auth
 
       auth: [
         {
           id: "local",
           label: "Local Claude CLI",
-          hint: "Uses your existing Claude Code CLI authentication (from Claude Max)",
+          hint: "Uses your existing Claude Code CLI authentication",
           kind: "custom",
 
           run: async (ctx: any) => {
@@ -112,7 +111,7 @@ const claudeCodeCliPlugin = {
               if (!authCheck.ok) {
                 spin.stop("Not authenticated");
                 await ctx.prompter.note(
-                  "Run 'claude auth login' to authenticate with your Claude Max account",
+                  "Run 'claude auth login' to authenticate with your Claude account",
                   "Authentication"
                 );
                 throw new Error(authCheck.error);
@@ -175,8 +174,7 @@ const claudeCodeCliPlugin = {
                 },
                 defaultModel: DEFAULT_MODEL,
                 notes: [
-                  "This uses your Claude Max subscription via Claude Code CLI.",
-                  "Your OAuth token is used by the CLI, not exposed directly.",
+                  "Claude Code CLI handles authentication internally.",
                   `Local server running at http://127.0.0.1:${serverPort}`,
                   "Keep the server running to use this provider.",
                 ],
@@ -203,7 +201,7 @@ const claudeCodeCliPlugin = {
     api.registerCli?.((cli: any) => {
       cli
         .command("claude-cli:start [port]")
-        .description("Start the Claude CLI proxy server")
+        .description("Start the Claude CLI adapter server")
         .action(async (port: string) => {
           const p = parseInt(port || String(DEFAULT_PORT), 10);
           await startServer({ port: p });
@@ -212,7 +210,7 @@ const claudeCodeCliPlugin = {
 
       cli
         .command("claude-cli:stop")
-        .description("Stop the Claude CLI proxy server")
+        .description("Stop the Claude CLI adapter server")
         .action(async () => {
           await stopServer();
           console.log("Server stopped");
@@ -220,7 +218,7 @@ const claudeCodeCliPlugin = {
 
       cli
         .command("claude-cli:status")
-        .description("Check Claude CLI proxy server status")
+        .description("Check Claude CLI adapter server status")
         .action(() => {
           const server = getServer();
           if (server) {
